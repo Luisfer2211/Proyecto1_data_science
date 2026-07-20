@@ -1,25 +1,10 @@
-"""
-Diagnostico del estado inicial (datos crudos) del conjunto de establecimientos
-educativos de nivel DIVERSIFICADO (MINEDUC), consolidado en
-establecimientos_diversificado_crudo.csv por 01_consolidar_crudo.py.
-
-Genera, con codigo (no a mano):
-  - Numero de registros y variables
-  - Tipo de dato de cada variable
-  - Cantidad y % de valores faltantes por variable (incluye "" y solo-espacios)
-  - Cantidad de valores unicos por variable
-  - Registros duplicados exactos
-  - Filas completamente vacias (artefacto de extraccion)
-  - Muestras de inconsistencias de formato/categoria por variable clave
-"""
-
 import os
 import re
 
 import pandas as pd
 
 CARPETA = os.path.join(os.path.dirname(__file__), "..")
-RUTA_CRUDO = os.path.join(CARPETA, "establecimientos_diversificado_crudo.csv")
+RUTA_CRUDO = os.path.join(CARPETA, "data", "establecimientos_diversificado_crudo.csv")
 
 pd.set_option("display.width", 160)
 pd.set_option("display.max_colwidth", 60)
@@ -122,22 +107,6 @@ def main():
     print(f"Codigos que cumplen el patron: {codigo_ok.sum()} / {len(df_datos)}")
     print("Ejemplos que NO cumplen:")
     print(df_datos.loc[~codigo_ok, "CODIGO"].drop_duplicates().head(10).to_string(index=False))
-
-    print("\n" + "=" * 70)
-    print("9b) FORMATO DE DISTRITO (formatos coexistentes)")
-    print("=" * 70)
-    dist = df_datos["DISTRITO"].str.strip()
-    fmt_corto = dist.str.fullmatch(r"\d{2}-\d{3}")
-    fmt_largo = dist.str.fullmatch(r"\d{2}-\d{2}-\d{4}")
-    vacio_dist = dist.eq("")
-    otro_dist = ~(fmt_corto | fmt_largo | vacio_dist)
-    print(f"Formato DD-DDD: {fmt_corto.sum()}")
-    print(f"Formato DD-DD-DDDD: {fmt_largo.sum()}")
-    print(f"Vacios: {vacio_dist.sum()}")
-    print(f"Otros (incompletos o fuera de patron): {otro_dist.sum()}")
-    if otro_dist.any():
-        print("Ejemplos de otros:")
-        print(dist[otro_dist].drop_duplicates().head(15).to_string())
 
     print("\n" + "=" * 70)
     print("10) NORMALIZACION DE TEXTO: espacios, mayus/minus mixtas, caracteres raros")

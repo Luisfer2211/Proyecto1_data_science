@@ -1,0 +1,10 @@
+pandas
+beautifulsoup4
+playwright
+rapidfuzz
+nbformat
+nbclient
+ipykernel
+
+
+#   playwright install chromium

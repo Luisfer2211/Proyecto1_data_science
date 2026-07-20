@@ -1,27 +1,13 @@
-"""
-Consolida los 23 archivos crudos (uno por departamento) descargados del
-buscador de establecimientos del MINEDUC (nivel escolar = DIVERSIFICADO)
-en un unico archivo CSV de datos crudos.
-
-Dos formatos de entrada conviven en la carpeta:
-  1. CSV limpio ya tabulado (columnas entre comillas, separadas por coma).
-  2. Pagina HTML completa guardada con extension .csv (el sitio del MINEDUC
-     lanzo un error de cliente al momento de guardar, pero la tabla de
-     resultados igual quedo incrustada en el HTML). Se extrae la tabla
-     con un parser HTML nativo (html.parser), sin dependencias externas.
-
-El resultado es 100% reproducible: solo requiere los 23 CSV originales
-en esta carpeta y la libreria estandar de Python + pandas.
-"""
-
-import csv
 import glob
 import os
-from html.parser import HTMLParser
 
 import pandas as pd
 
-CARPETA = os.path.join(os.path.dirname(__file__), "..")
+CARPETA_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+CARPETA_RAIZ = os.path.join(CARPETA_SCRIPT, "..")
+CARPETA_RAW = os.path.join(CARPETA_RAIZ, "data", "raw")
+SALIDA = os.path.join(CARPETA_RAIZ, "data", "establecimientos_diversificado_crudo.csv")
+
 COLUMNAS = [
     "CODIGO", "DISTRITO", "DEPARTAMENTO", "MUNICIPIO", "ESTABLECIMIENTO",
     "DIRECCION", "TELEFONO", "SUPERVISOR", "DIRECTOR", "NIVEL", "SECTOR",
@@ -29,97 +15,38 @@ COLUMNAS = [
 ]
 
 
-class TableExtractor(HTMLParser):
-    """Extrae todas las filas <tr>/<td> de un HTML, sin importar el <table> al que pertenezcan."""
-
-    def __init__(self):
-        super().__init__()
-        self.rows = []
-        self._current_row = None
-        self._current_cell = None
-        self._in_cell = False
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "tr":
-            self._current_row = []
-        elif tag == "td":
-            self._in_cell = True
-            self._current_cell = []
-
-    def handle_endtag(self, tag):
-        if tag == "td" and self._in_cell:
-            text = "".join(self._current_cell)
-            text = " ".join(text.split())  # colapsa espacios/saltos de linea
-            self._current_row.append(text)
-            self._in_cell = False
-            self._current_cell = None
-        elif tag == "tr" and self._current_row is not None:
-            self.rows.append(self._current_row)
-            self._current_row = None
-
-    def handle_data(self, data):
-        if self._in_cell:
-            self._current_cell.append(data)
-
-
-def es_html(ruta):
-    with open(ruta, encoding="latin-1") as f:
-        inicio = f.read(200)
-    return inicio.strip().startswith("<script>") or "<!DOCTYPE" in inicio
-
-
-def leer_csv_limpio(ruta):
-    # Estos archivos se generaron con un Blob JS en UTF-8 (descarga vía navegador)
-    with open(ruta, encoding="utf-8-sig", newline="") as f:
-        lector = csv.reader(f)
-        filas = list(lector)
-    encabezado = filas[0]
-    # La primera columna del CSV exportado desde el DOM viene vacia (celda de seleccion)
-    datos = [fila[1:] for fila in filas[1:] if len(fila) > 1]
-    return pd.DataFrame(datos, columns=COLUMNAS)
-
-
-def leer_html_incrustado(ruta):
-    # Estos archivos son la pagina ASP.NET original (codificada en Windows-1252)
-    with open(ruta, encoding="cp1252") as f:
-        contenido = f.read()
-    parser = TableExtractor()
-    parser.feed(contenido)
-    filas = [f for f in parser.rows if len(f) == len(COLUMNAS)]
-    # Descarta la fila de encabezado si quedo mezclada (CODIGO, DISTRITO, ...)
-    filas = [f for f in filas if f[0] != "CODIGO"]
-    return pd.DataFrame(filas, columns=COLUMNAS)
-
-
 def main():
-    archivos = sorted(glob.glob(os.path.join(CARPETA, "*_DIVERSIFICADO.csv")))
+    archivos = sorted(glob.glob(os.path.join(CARPETA_RAW, "*_DIVERSIFICADO.csv")))
+    if not archivos:
+        raise SystemExit(
+            f"No se encontraron archivos *_DIVERSIFICADO.csv en {CARPETA_RAW}. "
+            "Corre primero scripts/00_descargar_crudo.py."
+        )
+
     piezas = []
     resumen = []
     for ruta in archivos:
         nombre = os.path.basename(ruta)
-        if es_html(ruta):
-            df = leer_html_incrustado(ruta)
-            origen = "HTML incrustado (recuperado)"
-        else:
-            df = leer_csv_limpio(ruta)
-            origen = "CSV limpio"
+        df = pd.read_csv(ruta, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+        if list(df.columns) != COLUMNAS:
+            raise ValueError(f"{nombre}: columnas inesperadas -> {list(df.columns)}")
         df["ARCHIVO_ORIGEN"] = nombre
         piezas.append(df)
-        resumen.append((nombre, origen, len(df)))
+        resumen.append((nombre, len(df)))
 
     crudo = pd.concat(piezas, ignore_index=True)
 
-    print(f"{'Archivo':35s} {'Origen':28s} {'Filas':>8s}")
+    print(f"{'Archivo':40s} {'Filas':>8s}")
     total = 0
-    for nombre, origen, n in resumen:
-        print(f"{nombre:35s} {origen:28s} {n:8d}")
+    for nombre, n in resumen:
+        print(f"{nombre:40s} {n:8d}")
         total += n
-    print("-" * 75)
-    print(f"{'TOTAL':35s} {'':28s} {total:8d}")
+    print("-" * 50)
+    print(f"{'TOTAL':40s} {total:8d}")
 
-    salida = os.path.join(CARPETA, "establecimientos_diversificado_crudo.csv")
-    crudo.to_csv(salida, index=False, encoding="utf-8-sig")
-    print(f"\nGuardado: {salida}")
+    os.makedirs(os.path.dirname(SALIDA), exist_ok=True)
+    crudo.to_csv(SALIDA, index=False, encoding="utf-8-sig")
+    print(f"\nGuardado: {SALIDA}")
     print(f"Filas totales: {len(crudo)}  |  Columnas: {crudo.shape[1]}")
 
 
