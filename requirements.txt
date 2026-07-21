@@ -5,6 +5,7 @@ rapidfuzz
 nbformat
 nbclient
 ipykernel
+fpdf2
 
-
-#   playwright install chromium
+# playwright install chromium
+# optional: python scripts/export_codebook_pdf.py

@@ -216,4 +216,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-docs/
+# Keep project documentation tracked (only ignore Sphinx build artifacts above: docs/_build/)
